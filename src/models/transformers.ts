@@ -168,9 +168,9 @@ export class TransformerTokenizer implements Tokenizer {
     return [output.input_ids, output.attention_mask];
   }
 
-  async decode(tokenIds: any): Promise<string[]> {
+  decode(tokenIds: any): string[] {
     console.log('---tokenIds', tokenIds);
-    const text = this.tokenizer.batch_decode([tokenIds], {
+    const text = this.tokenizer.batch_decode(tokenIds, {
       skip_special_tokens: true,
     });
     return text;
@@ -327,6 +327,7 @@ export class Transformers extends Model {
     if (typeof prompts === 'string') {
       generatedIds = generatedIds.squeeze(0);
     }
+    console.log('---generatedIds', generatedIds.dims);
     return this.decodeGeneration(generatedIds);
   }
 
@@ -395,47 +396,6 @@ export class Transformers extends Model {
     // }
 
     return generatedIds;
-
-    // Handle encoder-decoder vs decoder-only models like the original
-    // encoder-decoder returns output_ids only, decoder-only returns full seq ids
-    // let generatedIds;
-    // if (this.model.config.is_encoder_decoder) {
-    //   generatedIds = outputIds;
-    // } else {
-    //   // Need to be tested. self note.
-    //   const inputLength = Array.isArray(inputIds)
-    //     ? inputIds[0].dims[1]
-    //     : inputIds.dims[1];
-    //   // This would need proper tensor slicing in practice
-    //   generatedIds = outputIds; // Simplified for now
-    // }
-
-    // const numSamples = inferenceKwargs?.['num_return_sequences'] ?? 1;
-
-    // console.log('----numSamples', numSamples);
-
-    // // TODO: TEST FROM HERE. AI GENERATED CODE.
-    // if (numSamples > 1 && Array.isArray(prompts)) {
-    //   // Try to get batch size from inputIds
-    //   let batchSize: number;
-    //   if (inputIds && inputIds.dims && inputIds.dims.length > 0) {
-    //     batchSize = inputIds.dims[0];
-    //   } else if (Array.isArray(inputIds) && inputIds[0]?.dims) {
-    //     batchSize = inputIds[0].dims[0];
-    //   } else {
-    //     batchSize = prompts.length;
-    //   }
-    //   // Reshape generatedIds to [batch_size, numSamples, -1]
-    //   if (generatedIds && generatedIds.dims && generatedIds.dims.length === 2) {
-    //     // Only reshape if dims are [batch_size * numSamples, seqLen]
-    //     const [flatBatch, seqLen] = generatedIds.dims;
-    //     if (flatBatch === batchSize * numSamples) {
-    //       generatedIds = generatedIds.view([batchSize, numSamples, seqLen]);
-    //     }
-    //   }
-    // }
-
-    // return generatedIds;
   }
 
   private getHuggingFaceTensorShape(tensor: any): number[] {
@@ -508,6 +468,34 @@ export class Transformers extends Model {
   }
 
   private decodeGeneration(generatedIds: TorchTensor): string | string[] {
+    // PYthon conversion
+    const shape = generatedIds.dims;
+    console.log('---shape', shape);
+    if (shape.length === 1) {
+      // Equivalent to: return self.tokenizer.decode([generated_ids])[0]
+      return this.tokenizer.decode([generatedIds])[0];
+    } else if (shape.length === 2) {
+      // Equivalent to: return self.tokenizer.decode(generated_ids)
+      return this.tokenizer.decode(generatedIds);
+    } else if (shape.length === 3) {
+      // Equivalent to: [self.tokenizer.decode(generated_ids[i]) for i in range(len(generated_ids))]
+      const len = shape[0];
+      const decodedArr: string[] = [];
+      for (let i = 0; i < len; i++) {
+        // Assume generatedIds[i] extracts the i-th 2D slice
+        // This may need to be adapted depending on TorchTensor implementation
+        const slice = generatedIds.get ? generatedIds.get(i) : generatedIds[i];
+        decodedArr.push(this.tokenizer.decode(slice));
+      }
+      return decodedArr;
+    } else {
+      // Equivalent to: raise TypeError(...)
+      throw new TypeError(
+        `Generated outputs aren't 1D, 2D or 3D, but instead are ${JSON.stringify(
+          shape
+        )}`
+      );
+    }
     // Extract token IDs from the tensor
     let tokenIds: number[];
 

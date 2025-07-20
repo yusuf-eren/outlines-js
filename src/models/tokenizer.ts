@@ -58,7 +58,7 @@ export interface Tokenizer {
    * @param tokenIds - Array of token IDs to decode
    * @returns Array of decoded strings
    */
-  decode(tokenIds: Tensor[] | Tensor): Promise<string[]>;
+  decode(tokenIds: Tensor[] | Tensor): string[];
 
   /**
    * Convert a token to its equivalent string representation.
