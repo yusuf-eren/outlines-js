@@ -168,13 +168,11 @@ export class TransformerTokenizer implements Tokenizer {
     return [output.input_ids, output.attention_mask];
   }
 
-  // TODO: FIX THIS
   async decode(tokenIds: any): Promise<string[]> {
     console.log('---tokenIds', tokenIds);
     const text = this.tokenizer.batch_decode([tokenIds], {
       skip_special_tokens: true,
     });
-    console.log('--text', text);
     return text;
   }
 
@@ -313,115 +311,23 @@ export class Transformers extends Model {
     );
     const logitsProcessor = this.typeAdapter.formatOutputType(outputType);
 
-    const generatedIds = await this.#generateOutputSeq({
+    console.log(
+      '---inputs',
+      inputs.attention_mask.ort_tensor.dims,
+      inputs.input_ids.ort_tensor.dims
+    );
+    let generatedIds = await this.#generateOutputSeq({
       prompts,
       inputs,
       logitsProcessor,
       inferenceKwargs,
     });
 
-    // For transformers.js, we need to implement token-by-token generation with logits processing
-    try {
-      let currentInputIds = inputs.input_ids;
-      let currentAttentionMask = inputs.attention_mask;
-      const maxNewTokens = 50; // Generate up to 50 new tokens
-      const generatedTokens: number[] = [];
-
-      console.log(
-        '---Starting generation with logits processor:',
-        !!logitsProcessor
-      );
-
-      for (let step = 0; step < maxNewTokens; step++) {
-        console.log(`---Generation step ${step + 1}/${maxNewTokens}`);
-
-        try {
-          const modelInputs = {
-            input_ids: currentInputIds,
-            attention_mask: currentAttentionMask,
-          };
-          const output = await (this.model as any)(modelInputs);
-
-          let logits = output.logits;
-
-          if (logitsProcessor && logitsProcessor.length > 0) {
-            logits = logitsProcessor[0](currentInputIds, logits);
-          }
-
-          const nextTokenId = this.sampleFromLogits(logits);
-          generatedTokens.push(nextTokenId);
-
-          // Update currentInputIds and currentAttentionMask for the next step
-          currentInputIds = this.appendToken(currentInputIds, nextTokenId);
-
-          // For attention mask, assuming it grows by one for each new token
-          const currentAttentionMaskData = Array.from(
-            currentAttentionMask.ort_tensor?.cpuData ||
-              currentAttentionMask.data ||
-              []
-          );
-          const newAttentionMaskData = new BigInt64Array([
-            // Using BigInt64Array
-            ...currentAttentionMaskData.map(Number).map(BigInt), // Convert existing to BigInt
-            BigInt(1), // Add 1 for the new token
-          ]);
-          currentAttentionMask = new Tensor('int64', newAttentionMaskData, [
-            1,
-            newAttentionMaskData.length,
-          ]);
-
-          // Stop if EOS token is generated
-          if (nextTokenId === this.tokenizer.eosTokenId) {
-            console.log('---EOS token generated, stopping generation.');
-            break;
-          }
-        } catch (forwardError) {
-          console.error('---Forward pass failed:', forwardError);
-          // For demo, just add a default token and stop
-          generatedTokens.push(590022);
-          console.log('---Added fallback token, stopping generation.');
-          break;
-        }
-      }
-
-      console.log('---Generated token IDs:', generatedTokens);
-
-      // Decode the generated tokens - handle empty case
-      let generatedText = '';
-      if (generatedTokens.length > 0) {
-        try {
-          const decoded = this.tokenizer.decode(generatedTokens);
-          generatedText = Array.isArray(decoded) ? decoded[0] : decoded;
-        } catch (error) {
-          console.warn('Decode failed, trying alternative method:', error);
-          // Try using the transformers tokenizer's decode method for a single sequence
-          try {
-            const decodedArray = this.transformerTokenizer.decode(
-              generatedTokens,
-              {
-                skip_special_tokens: true,
-              }
-            );
-            generatedText = Array.isArray(decodedArray)
-              ? decodedArray[0]
-              : decodedArray;
-          } catch (error2) {
-            console.warn('Alternative decode also failed:', error2);
-            // Last resort: convert tokens individually
-            generatedText = generatedTokens
-              .map((tokenId) => `<token_${tokenId}>`)
-              .join('');
-          }
-        }
-      }
-      console.log('---Generated text:', generatedText);
-
-      // Return the generated text
-      return Array.isArray(generatedText) ? generatedText[0] : generatedText;
-    } catch (error) {
-      console.error('Model inference failed:', error);
-      throw error;
+    console.log('_pirompt', prompts);
+    if (typeof prompts === 'string') {
+      generatedIds = generatedIds.squeeze(0);
     }
+    return this.decodeGeneration(generatedIds);
   }
 
   /**
@@ -448,60 +354,88 @@ export class Transformers extends Model {
     inferenceKwargs?: Record<string, any>;
   }): Promise<TorchTensor> {
     const inputIds = inputs.input_ids;
-    console.log('---DALGAIDS', inputIds);
     const outputIds = await this.model.generate({
-      inputs: inputs.input_ids,
-      // ...inferenceKwargs,
+      ...inputs,
       logits_processor: logitsProcessor,
+      generation_config: {
+        max_new_tokens: 100,
+      },
     });
 
-    console.log('---outputIds from model.generate:', outputIds);
-
-    const token = Object.keys(this.tokenizer.vocabulary).find(
-      (r) => this.tokenizer.vocabulary[r] === outputIds[0][0]
+    console.log(
+      '---outputIds from model.generate:',
+      outputIds,
+      inferenceKwargs,
+      prompts,
+      inputs.attention_mask
     );
-    console.log('---token', token);
+
+    let generatedIds = outputIds;
+    console.log('squeeze brah', generatedIds.squeeze(0));
+    if (!this.model.config.is_encoder_decoder) {
+      const promptLen = inputs.input_ids.dims[1];
+      console.log('---inputsD', inputs.input_ids, outputIds.data, promptLen);
+      generatedIds = new Tensor('int64', outputIds.data.slice(promptLen), [
+        outputIds.data.slice(promptLen).length,
+      ]);
+    }
+
+    // INSERT_YOUR_CODE
+    const numSamples = inferenceKwargs?.[0]?.num_return_sequences || 1;
+    // TODO: FIX THIS. GENERATED IDS IS NOT A TENSOR.
+    // if (
+    //   numSamples > 1 &&
+    //   Array.isArray(prompts) &&
+    //   inputs.input_ids &&
+    //   inputs.input_ids.dims &&
+    //   typeof generatedIds.view === 'function'
+    // ) {
+    //   const batchSize = inputs.input_ids.dims[0];
+    //   generatedIds = generatedIds.view(batchSize, numSamples, -1);
+    // }
+
+    return generatedIds;
 
     // Handle encoder-decoder vs decoder-only models like the original
     // encoder-decoder returns output_ids only, decoder-only returns full seq ids
-    let generatedIds;
-    if (this.model.config.is_encoder_decoder) {
-      generatedIds = outputIds;
-    } else {
-      // Need to be tested. self note.
-      const inputLength = Array.isArray(inputIds)
-        ? inputIds[0].dims[1]
-        : inputIds.dims[1];
-      // This would need proper tensor slicing in practice
-      generatedIds = outputIds; // Simplified for now
-    }
+    // let generatedIds;
+    // if (this.model.config.is_encoder_decoder) {
+    //   generatedIds = outputIds;
+    // } else {
+    //   // Need to be tested. self note.
+    //   const inputLength = Array.isArray(inputIds)
+    //     ? inputIds[0].dims[1]
+    //     : inputIds.dims[1];
+    //   // This would need proper tensor slicing in practice
+    //   generatedIds = outputIds; // Simplified for now
+    // }
 
-    const numSamples = inferenceKwargs?.['num_return_sequences'] ?? 1;
+    // const numSamples = inferenceKwargs?.['num_return_sequences'] ?? 1;
 
-    console.log('----numSamples', numSamples);
+    // console.log('----numSamples', numSamples);
 
-    // TODO: TEST FROM HERE. AI GENERATED CODE.
-    if (numSamples > 1 && Array.isArray(prompts)) {
-      // Try to get batch size from inputIds
-      let batchSize: number;
-      if (inputIds && inputIds.dims && inputIds.dims.length > 0) {
-        batchSize = inputIds.dims[0];
-      } else if (Array.isArray(inputIds) && inputIds[0]?.dims) {
-        batchSize = inputIds[0].dims[0];
-      } else {
-        batchSize = prompts.length;
-      }
-      // Reshape generatedIds to [batch_size, numSamples, -1]
-      if (generatedIds && generatedIds.dims && generatedIds.dims.length === 2) {
-        // Only reshape if dims are [batch_size * numSamples, seqLen]
-        const [flatBatch, seqLen] = generatedIds.dims;
-        if (flatBatch === batchSize * numSamples) {
-          generatedIds = generatedIds.view([batchSize, numSamples, seqLen]);
-        }
-      }
-    }
+    // // TODO: TEST FROM HERE. AI GENERATED CODE.
+    // if (numSamples > 1 && Array.isArray(prompts)) {
+    //   // Try to get batch size from inputIds
+    //   let batchSize: number;
+    //   if (inputIds && inputIds.dims && inputIds.dims.length > 0) {
+    //     batchSize = inputIds.dims[0];
+    //   } else if (Array.isArray(inputIds) && inputIds[0]?.dims) {
+    //     batchSize = inputIds[0].dims[0];
+    //   } else {
+    //     batchSize = prompts.length;
+    //   }
+    //   // Reshape generatedIds to [batch_size, numSamples, -1]
+    //   if (generatedIds && generatedIds.dims && generatedIds.dims.length === 2) {
+    //     // Only reshape if dims are [batch_size * numSamples, seqLen]
+    //     const [flatBatch, seqLen] = generatedIds.dims;
+    //     if (flatBatch === batchSize * numSamples) {
+    //       generatedIds = generatedIds.view([batchSize, numSamples, seqLen]);
+    //     }
+    //   }
+    // }
 
-    return generatedIds;
+    // return generatedIds;
   }
 
   private getHuggingFaceTensorShape(tensor: any): number[] {
@@ -601,7 +535,6 @@ export class Transformers extends Model {
     // Use the tokenizer's decode method
     try {
       const decoded = this.tokenizer.decode(tokenIds);
-      console.log('---Decoded text:', decoded);
       return Array.isArray(decoded) ? decoded[0] : decoded;
     } catch (error) {
       console.warn('Decode failed:', error);
