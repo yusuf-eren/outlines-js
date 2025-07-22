@@ -354,26 +354,7 @@ export class RegexGuide extends Guide implements CoreRegexGuide {
     super();
     this.regexString = regexString;
     this.tokenizer = tokenizer;
-    const zort = buildRegexFSM(
-      `(\{[ ]?"name"[ ]?:[ ]?"([^"\\\x00-\x1F\x7F-\x9F]|\\["\\])*"[ ]?,[ ]?"age"[ ]?:[ ]?(-)?(0|[1-9][0-9]*)[ ]?\})`,
-      tokenizer
-    );
-
-    // (\{[ ]?"name"[ ]?:[ ]?"([^"\\\x00-\x1F\x7F-\x9F]|\\["\\])*"[ ]?,[ ]?"age"[ ]?:[ ]?(-)?(0|[1-9][0-9]*)[ ]?\})
-    //
-    console.log('regex sitir', regexString);
-    console.log(
-      '---BUILDING FSM',
-      zort.finalStates,
-      zort.initialState,
-      zort.states.get(0)
-    );
-    this.fsm =
-      fsm ||
-      buildRegexFSM(
-        `(\{[ ]?"name"[ ]?:[ ]?"([^"\\\x00-\x1F\x7F-\x9F]|\\["\\])*"[ ]?,[ ]?"age"[ ]?:[ ]?(-)?(0|[1-9][0-9]*)[ ]?\})`,
-        tokenizer
-      );
+    this.fsm = fsm || buildRegexFSM(regexString, tokenizer);
     this.initialState = this.fsm.initialState;
     console.log('---INITIAL STATE', this.initialState, this.fsm);
   }

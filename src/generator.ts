@@ -12,10 +12,7 @@ import {
 } from './processors';
 import { RegexGuide } from './processors/guide';
 import { CFG, FSM } from './types';
-import {
-  typescriptTypesToTerms as pythonTypesToTerms,
-  toRegex,
-} from './types/dsl';
+import { typescriptTypesToTerms, toRegex } from './types/dsl';
 
 /**
  * Represents a generator for which we control constrained generation.
@@ -51,7 +48,7 @@ export class SteerableGenerator {
     if (outputType == null) {
       this.logitsProcessor = null;
     } else {
-      const term = pythonTypesToTerms(outputType);
+      const term = typescriptTypesToTerms(outputType);
 
       if (term instanceof CFG) {
         const cfgString = term.definition;

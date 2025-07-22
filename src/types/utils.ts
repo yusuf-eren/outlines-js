@@ -4,6 +4,7 @@
  * TypeScript port of the Python utilities for type identification and conversion.
  */
 
+import { ZodObject } from 'zod';
 import { JsonSchema7Type } from 'zod-to-json-schema';
 
 // Type aliases for common constructs
@@ -60,8 +61,8 @@ export function isFloatInstance(value: Any): value is number {
 /**
  * Check if a value represents the string type
  */
-export function isStr(value: Any): boolean {
-  return value === String || value === 'string';
+export function isString(value: Any): boolean {
+  return typeof value === 'string';
 }
 
 /**
@@ -153,6 +154,10 @@ export function isPydanticModel(value: Any): boolean {
     value.prototype &&
     typeof value.prototype.constructor === 'function'
   );
+}
+
+export function isZodSchema(value: Any): value is ZodObject<any> {
+  return value instanceof ZodObject;
 }
 
 /**
@@ -384,13 +389,16 @@ export class SimpleSchemaBuilder implements SchemaBuilder {
   }
 }
 
+export function isJSON(value: any): value is JSON {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
 // Export all utility functions
 export default {
   isInt,
   isIntInstance,
   isFloat,
   isFloatInstance,
-  isStr,
   isStrInstance,
   isBool,
   isDictInstance,
@@ -401,6 +409,8 @@ export default {
   isTypedDict,
   isDataclass,
   isPydanticModel,
+  isZodSchema,
+  isJSON,
   isGensonSchemaBuilder,
   isLiteral,
   isUnion,

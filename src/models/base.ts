@@ -275,3 +275,34 @@ export abstract class AsyncModel {
     inferenceKwargs?: Record<string, any>
   ): AsyncIterable<any>;
 }
+
+// TODO: Could be used in other classes to python-like functionality.
+/**
+ * This class is converted from javascript to typescript,
+ * which is provided by `@huggingface/transformers` library.
+ * A base class for creating callable objects.
+ * See [here](https://stackoverflow.com/q/76073890) for more information.
+ */
+export const Callable = class {
+  /**
+   * Creates a new instance of the Callable class.
+   */
+  constructor() {
+    /**
+     * Creates a closure that delegates to a private method '_call' with the given arguments.
+     */
+    const closure = function (...args: any[]): any {
+      return (closure as any)._call(...args);
+    };
+    return Object.setPrototypeOf(closure, new.target.prototype);
+  }
+
+  /**
+   * This method should be implemented in subclasses to provide the
+   * functionality of the callable object.
+   */
+  _call(...args: any[]): any {
+    throw new Error('Must implement _call method in subclass');
+  }
+} as any;
+

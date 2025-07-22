@@ -69,10 +69,7 @@ export abstract class OutlinesLogitsProcessor {
    *     The processed logits as a 2D tensor.
    */
 
-  async __call__(
-    input_ids: TensorType,
-    logits: TensorType
-  ): Promise<TensorType> {
+  __call__(input_ids: TensorType, logits: TensorType): TensorType {
     /**
      * Entrypoint for logits processors, this is the method that is
      * called by the model.
@@ -160,9 +157,9 @@ export abstract class OutlinesLogitsProcessor {
     let processed_logits: TensorType;
     if (this.tensor_adapter.shape(logits).length === 2) {
       console.log('---inputIdsZart', input_ids, logits);
-      processed_logits = await this.process_logits(input_ids, logits);
+      processed_logits = this.process_logits(input_ids, logits);
     } else if (this.tensor_adapter.shape(logits).length === 1) {
-      processed_logits = await this.tensor_adapter.squeeze(
+      processed_logits = this.tensor_adapter.squeeze(
         this.process_logits(
           this.tensor_adapter.unsqueeze(input_ids),
           this.tensor_adapter.unsqueeze(logits)
@@ -175,18 +172,11 @@ export abstract class OutlinesLogitsProcessor {
       );
     }
 
-    const r = await processed_logits.array();
-    console.log(
-      '---processed_logits',
-      r,
-      typeof r,
-      // DESCENDING SORT
-      r[0].sort((a, b) => b - a),
-      // ASCENDING SORT
-      r[0].sort((a, b) => a - b)
+    return new Tensor(
+      'float32',
+      processed_logits.dataSync(),
+      processed_logits.shape
     );
-
-    return tf.tensor(r);
   }
 }
 

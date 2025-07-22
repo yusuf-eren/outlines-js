@@ -9,12 +9,13 @@
  * 3. Conversion of a `Term` instance into a regular expression (`toRegex`).
  */
 
+import { toJSONSchema } from 'zod';
 import {
   isInt,
   isIntInstance,
   isFloat,
   isFloatInstance,
-  isStr,
+  isString,
   isStrInstance,
   isBool,
   isDatetime,
@@ -34,7 +35,11 @@ import {
   isTypingTuple,
   isTypingDict,
   get_schema_from_signature,
+  isZodSchema,
+  isJSON,
 } from './utils';
+import { boolean, integer, number, string } from './index';
+import { buildRegexFromSchema } from '../outlines-core';
 
 // Base Term class
 export abstract class Term {
@@ -225,22 +230,26 @@ export class JsonSchema extends Term {
     schema: Record<string, any> | string | any,
     whitespacePattern?: string
   ) {
+    console.log('---schemaON CONSTRUCTOR 1', schema, whitespacePattern);
     super();
-
+    console.log(
+      '---schemaON CONSTRUCTOR 2',
+      schema,
+      whitespacePattern,
+      typeof schema
+    );
     let schemaStr: string;
 
-    if (isDictInstance(schema)) {
-      schemaStr = JSON.stringify(schema);
+    if (isZodSchema(schema)) {
+      // TODO: TO JSON FUNCTION IMPLEMENT
+      schemaStr = JSON.stringify(toJSONSchema(schema));
+
+      console.log('---schemaStr', schemaStr);
     } else if (isStrInstance(schema)) {
       schemaStr = String(schema);
-    } else if (isPydanticModel(schema)) {
+    } else if (isJSON(schema)) {
+      console.log('---schema is JSON', schema);
       schemaStr = JSON.stringify(schema);
-    } else if (isTypedDict(schema)) {
-      schemaStr = JSON.stringify(schema);
-    } else if (isDataclass(schema)) {
-      schemaStr = JSON.stringify(schema);
-    } else if (isGensonSchemaBuilder(schema)) {
-      schemaStr = JSON.stringify(schema.toSchema());
     } else {
       throw new Error(
         `Cannot parse schema ${schema}. The schema must be either ` +
@@ -252,9 +261,10 @@ export class JsonSchema extends Term {
     this.schema = schemaStr;
     this.whitespacePattern = whitespacePattern;
 
+    console.log('---this.schema', this.schema);
     // Validate the schema
     try {
-      JSON.parse(this.schema);
+      this.schema = JSON.parse(this.schema);
     } catch (e) {
       throw new Error(`Invalid JSON schema: ${e}`);
     }
@@ -444,6 +454,7 @@ export function fsm(fsmInstance: any): FSM {
 export function jsonSchema(
   schema: Record<string, any> | string | any
 ): JsonSchema {
+  console.log('---jsonSchema', schema);
   return new JsonSchema(schema);
 }
 
@@ -495,46 +506,52 @@ export function oneOrMore(term: Term | string): KleenePlus {
 
 // Type conversion function
 export function typescriptTypesToTerms(
-  ptype: any,
+  type: any,
   recursionDepth: number = 0
 ): Term {
   if (recursionDepth > 10) {
     throw new Error(
-      `Maximum recursion depth exceeded when converting ${ptype}. This might be due to a recursive type definition.`
+      `Maximum recursion depth exceeded when converting ${type}. This might be due to a recursive type definition.`
     );
   }
 
   // First handle Term instances
-  if (ptype instanceof Term) {
-    return ptype;
+  if (type instanceof Term) {
+    return type;
+  }
+
+  if (isZodSchema(type)) {
+    console.log('---type', type);
+    console.log('---toJSONSchemaRAW', toJSONSchema(type));
+    return new JsonSchema(toJSONSchema(type));
   }
 
   // Basic types
-  if (isInt(ptype)) {
-    return new Regex('[+-]?(0|[1-9][0-9]*)');
-  } else if (isFloat(ptype)) {
-    return new Regex('[+-]?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-][0-9]+)?');
-  } else if (isBool(ptype)) {
-    return either('true', 'false');
-  } else if (isStr(ptype)) {
-    return new Regex('"[^"]*"');
-  } else if (isNativeDict(ptype)) {
+  if (isInt(type)) {
+    return integer;
+  } else if (isFloat(type)) {
+    return number;
+  } else if (isBool(type)) {
+    return boolean;
+  } else if (isString(type)) {
+    return string;
+  } else if (isNativeDict(type)) {
     return new JsonSchema('{}');
-  } else if (isTime(ptype)) {
+  } else if (isTime(type)) {
     return new Regex('([0-1][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])');
-  } else if (isDate(ptype)) {
+  } else if (isDate(type)) {
     return new Regex('(\\d{4})-(0[1-9]|1[0-2])-([0-2][0-9]|3[0-1])');
-  } else if (isDatetime(ptype)) {
+  } else if (isDatetime(type)) {
     return new Regex(
       '(\\d{4})-(0[1-9]|1[0-2])-([0-2][0-9]|3[0-1])(\\s)([0-1][0-9]|2[0-3]):([0-5][0-9]):([0-5][0-9])'
     );
   }
 
   // Basic type instances
-  if (isStrInstance(ptype)) {
-    return new StringTerm(ptype);
-  } else if (isIntInstance(ptype) || isFloatInstance(ptype)) {
-    return new Regex(String(ptype));
+  if (isStrInstance(type)) {
+    return new StringTerm(type);
+  } else if (isIntInstance(type) || isFloatInstance(type)) {
+    return new Regex(String(type));
   }
 
   // Structured types
@@ -544,40 +561,40 @@ export function typescriptTypesToTerms(
     (x: any) => isPydanticModel(x),
   ];
 
-  if (structuredTypeChecks.some((check) => check(ptype))) {
-    return new JsonSchema(ptype);
+  if (structuredTypeChecks.some((check) => check(type))) {
+    return new JsonSchema(type);
   }
 
-  if (isGensonSchemaBuilder(ptype)) {
-    const schema = ptype.toSchema();
+  if (isGensonSchemaBuilder(type)) {
+    const schema = type.toSchema();
     return new JsonSchema(JSON.stringify(schema));
   }
 
-  if (isEnum(ptype)) {
+  if (isEnum(type)) {
     return new Alternatives(
-      getEnumMembers(ptype).map((member) =>
+      getEnumMembers(type).map((member) =>
         typescriptTypesToTerms(member, recursionDepth + 1)
       )
     );
   }
 
-  if (isLiteral(ptype)) {
-    return handleLiteral(ptype);
-  } else if (isUnion(ptype)) {
-    return handleUnion(ptype, recursionDepth);
-  } else if (isTypingList(ptype)) {
-    return handleList(ptype, recursionDepth);
-  } else if (isTypingTuple(ptype)) {
-    return handleTuple(ptype, recursionDepth);
-  } else if (isTypingDict(ptype)) {
-    return handleDict(ptype, recursionDepth);
+  if (isLiteral(type)) {
+    return handleLiteral(type);
+  } else if (isUnion(type)) {
+    return handleUnion(type, recursionDepth);
+  } else if (isTypingList(type)) {
+    return handleList(type, recursionDepth);
+  } else if (isTypingTuple(type)) {
+    return handleTuple(type, recursionDepth);
+  } else if (isTypingDict(type)) {
+    return handleDict(type, recursionDepth);
   }
 
-  if (isCallable(ptype)) {
-    return new JsonSchema(get_schema_from_signature(ptype));
+  if (isCallable(type)) {
+    return new JsonSchema(get_schema_from_signature(type));
   }
 
-  const typeName = ptype?.name || ptype;
+  const typeName = type?.name || type;
   throw new TypeError(
     `Type ${typeName} is currently not supported. Please open an issue: ` +
       'https://github.com/dottxt-ai/outlines/issues'
@@ -746,12 +763,19 @@ export function times(term: Term, count: number): QuantifyExact {
 
 // Regex conversion function
 export function toRegex(term: Term): string {
+  console.log('---termBEFORE_      toRegex', term, term.constructor.name);
   if (term instanceof StringTerm) {
     return escapeRegex(term.value);
   } else if (term instanceof Regex) {
     return `(${term.pattern})`;
   } else if (term instanceof JsonSchema) {
-    const regexStr = buildRegexFromSchema(term.schema, term.whitespacePattern);
+    console.log('instens', term.schema, term.whitespacePattern);
+    const regexStr = buildRegexFromSchema(
+      JSON.stringify(term.schema, null, 2),
+      term.whitespacePattern
+    );
+    console.log('---term.schema', term.schema);
+    console.log('---regexStr', regexStr);
     return `(${regexStr})`;
   } else if (term instanceof KleeneStar) {
     return `(${toRegex(term.term)})*`;
@@ -785,72 +809,77 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function buildRegexFromSchema(
-  schema: string,
-  whitespacePattern?: string
-): string {
-  try {
-    const parsedSchema = JSON.parse(schema);
-    const ws = whitespacePattern || '[ \\t\\n\\r]*';
+// function buildRegexFromSchema(
+//   schema: string,
+//   whitespacePattern?: string
+// ): string {
+//   try {
+//     const parsedSchema = JSON.parse(schema);
+//     const ws = whitespacePattern || '[ \\t\\n\\r]*';
 
-    // Handle integer type specifically
-    if (parsedSchema.type === 'integer') {
-      return '[+-]?(0|[1-9][0-9]*)';
-    }
+//     // Handle integer type specifically
+//     if (parsedSchema.type === 'integer') {
+//       return '[+-]?(0|[1-9][0-9]*)';
+//     }
 
-    // Handle string type
-    if (parsedSchema.type === 'string') {
-      return '"[^"]*"';
-    }
+//     // Handle string type
+//     if (parsedSchema.type === 'string') {
+//       return '"[^"]*"';
+//     }
 
-    // Handle number type
-    if (parsedSchema.type === 'number') {
-      return '[+-]?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?';
-    }
+//     // Handle number type
+//     if (parsedSchema.type === 'number') {
+//       return '[+-]?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?';
+//     }
 
-    // Handle boolean type
-    if (parsedSchema.type === 'boolean') {
-      return '(true|false)';
-    }
+//     // Handle boolean type
+//     if (parsedSchema.type === 'boolean') {
+//       return '(true|false)';
+//     }
 
-    // Handle object schemas with pattern properties (outlines format)
-    if (typeof parsedSchema === 'object' && !parsedSchema.type && !Array.isArray(parsedSchema)) {
-      const properties = Object.keys(parsedSchema);
-      
-      if (properties.length > 0) {
-        // Build JSON object pattern: {"key1": pattern1, "key2": pattern2}
-        const propertyPatterns: string[] = [];
-        
-        for (const key of properties) {
-          const keyPattern = `"${escapeRegex(key)}"`;
-          const valueDef = parsedSchema[key];
-          let valuePattern: string;
-          
-          if (valueDef && typeof valueDef === 'object' && valueDef.pattern) {
-            // Use the pattern directly from the property definition
-            valuePattern = valueDef.pattern;
-          } else {
-            // Fallback to generic value pattern
-            valuePattern = '(?:null|true|false|[+-]?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|"[^"]*")';
-          }
-          
-          propertyPatterns.push(`${keyPattern}${ws}:${ws}${valuePattern}`);
-        }
-        
-        // Create object pattern: { "key1": value1, "key2": value2 }
-        const objectContent = propertyPatterns.join(`${ws},${ws}`);
-        return `\\{${ws}${objectContent}${ws}\\}`;
-      }
-    }
+//     // Handle object schemas with pattern properties (outlines format)
+//     if (
+//       typeof parsedSchema === 'object' &&
+//       !parsedSchema.type &&
+//       !Array.isArray(parsedSchema)
+//     ) {
+//       const properties = Object.keys(parsedSchema);
 
-    // Fallback for unsupported types
-    return '.*';
-  } catch (error) {
-    // If JSON parsing fails, return fallback
-    console.warn('Failed to parse schema for regex conversion:', error);
-    return '.*';
-  }
-}
+//       if (properties.length > 0) {
+//         // Build JSON object pattern: {"key1": pattern1, "key2": pattern2}
+//         const propertyPatterns: string[] = [];
+
+//         for (const key of properties) {
+//           const keyPattern = `"${escapeRegex(key)}"`;
+//           const valueDef = parsedSchema[key];
+//           let valuePattern: string;
+
+//           if (valueDef && typeof valueDef === 'object' && valueDef.pattern) {
+//             // Use the pattern directly from the property definition
+//             valuePattern = valueDef.pattern;
+//           } else {
+//             // Fallback to generic value pattern
+//             valuePattern =
+//               '(?:null|true|false|[+-]?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?|"[^"]*")';
+//           }
+
+//           propertyPatterns.push(`${keyPattern}${ws}:${ws}${valuePattern}`);
+//         }
+
+//         // Create object pattern: { "key1": value1, "key2": value2 }
+//         const objectContent = propertyPatterns.join(`${ws},${ws}`);
+//         return `\\{${ws}${objectContent}${ws}\\}`;
+//       }
+//     }
+
+//     // Fallback for unsupported types
+//     return '.*';
+//   } catch (error) {
+//     // If JSON parsing fails, return fallback
+//     console.warn('Failed to parse schema for regex conversion:', error);
+//     return '.*';
+//   }
+// }
 
 // Export aliases
 export { StringTerm as String, typescriptTypesToTerms as pythonTypesToTerms };

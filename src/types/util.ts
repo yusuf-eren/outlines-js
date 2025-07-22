@@ -17,7 +17,3 @@ function isBool(value: any): value is boolean {
 function isDate(value: any): value is Date {
   return value instanceof Date;
 }
-
-function isJSON(value: any): value is JSON {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}

@@ -3,11 +3,13 @@
  */
 
 import { Model, ModelTypeAdapter } from './base';
-import { Tokenizer, TokenizerEncodingResult } from './tokenizer';
+import { Tokenizer } from './tokenizer';
 import { OutlinesLogitsProcessor } from '../processors/index';
 import {
   Tensor,
   PreTrainedTokenizer,
+  LlamaTokenizer,
+  CodeLlamaTokenizer,
   LogitsProcessorList,
   PreTrainedModel,
 } from '@huggingface/transformers';
@@ -52,42 +54,19 @@ export interface TorchTensor {
 
 export interface TorchLongTensor extends TorchTensor {}
 
-// Tokenizer type classes for Llama variants
-interface LlamaTokenizerType {
-  new (...args: any[]): any;
-}
+type LlamaTokenizerType = typeof LlamaTokenizer | typeof CodeLlamaTokenizer;
 
 /**
  * Get all the Llama tokenizer types/classes that need work-arounds.
- * When they can't be imported, a dummy class is created.
+ * Uses the actual imported classes from @huggingface/transformers.
  */
 function getLlamaTokenizerTypes(): LlamaTokenizerType[] {
-  const dummyTypes: LlamaTokenizerType[] = [];
-
-  try {
-    // In a real implementation, these would be imported from transformers
-    // For now, we'll create dummy classes
-    class LlamaTokenizer {}
-    class LlamaTokenizerFast {}
-    class CodeLlamaTokenizer {}
-    class CodeLlamaTokenizerFast {}
-
-    dummyTypes.push(
-      LlamaTokenizer as any,
-      LlamaTokenizerFast as any,
-      CodeLlamaTokenizer as any,
-      CodeLlamaTokenizerFast as any
-    );
-  } catch (error) {
-    // If imports fail, return empty array
-    console.warn('Could not import Llama tokenizer types:', error);
-  }
-
-  return dummyTypes;
+  const types: LlamaTokenizerType[] = [LlamaTokenizer, CodeLlamaTokenizer];
+  return types;
 }
 
 /**
- * Represents a tokenizer for models in the `transformers` library.
+ * Represents a tokenizer for models in the `@huggingface/transformers` library.
  */
 export class TransformerTokenizer implements Tokenizer {
   public readonly eosToken: string;
@@ -99,10 +78,8 @@ export class TransformerTokenizer implements Tokenizer {
 
   private tokenizer: PreTrainedTokenizer;
   private isLlama: boolean;
-  private modelName?: string;
-  private kwargs?: any;
 
-  constructor(tokenizer: PreTrainedTokenizer, kwargs?: any) {
+  constructor(tokenizer: PreTrainedTokenizer) {
     this.tokenizer = tokenizer;
     this.eosTokenId = tokenizer.eos_token_id;
     this.eosToken = tokenizer.eos_token;
@@ -129,10 +106,6 @@ export class TransformerTokenizer implements Tokenizer {
 
     const llamaTypes = getLlamaTokenizerTypes();
     this.isLlama = llamaTypes.some((type) => tokenizer instanceof type);
-
-    if (kwargs) {
-      this.kwargs = kwargs;
-    }
   }
 
   /**
@@ -153,25 +126,24 @@ export class TransformerTokenizer implements Tokenizer {
     return vocabulary;
   }
 
-  async encode(
+  encode(
     prompt: string | string[],
     options: Record<string, any> = {}
-  ): Promise<[Tensor, Tensor]> {
+  ): [Tensor, Tensor] {
     options = {
       padding: true,
-      return_tensors: 'pt',
+      return_tensors: 'pt', // Need to be tested since there is no pt in node environment.
       ...options,
     };
 
-    const output = await this.tokenizer(prompt, options);
-    console.log('---MASK VE INPUT IDS');
+    const output = this.tokenizer(prompt, options);
     return [output.input_ids, output.attention_mask];
   }
 
-  decode(tokenIds: any): string[] {
-    console.log('---tokenIds', tokenIds);
+  decode(tokenIds: Tensor): string[] {
     const text = this.tokenizer.batch_decode(tokenIds, {
-      skip_special_tokens: true,
+      skip_special_tokens: false,
+      // TODO: Set to true after the library released. Currently need to see everything :)
     });
     return text;
   }
@@ -208,9 +180,9 @@ export class TransformersTypeAdapter implements ModelTypeAdapter {
       return this.formatStrInput(modelInput);
     } else if (
       Array.isArray(modelInput) &&
-      modelInput.every((item) => typeof item === 'string')
+      modelInput.every((item): item is string => typeof item === 'string')
     ) {
-      return this.formatListInput(modelInput as string[]);
+      return this.formatListInput(modelInput);
     } else {
       throw new Error(
         `The input type ${typeof modelInput} is not available. Please use a string or a list of strings.`
@@ -233,11 +205,11 @@ export class TransformersTypeAdapter implements ModelTypeAdapter {
     outputType?: OutlinesLogitsProcessor
   ): LogitsProcessorList | null {
     if (outputType) {
-      const wrappedProcessor = async (
+      const wrappedProcessor = (
         input_ids: bigint[][],
         logits: Tensor
-      ): Promise<Tensor> => {
-        return await outputType.__call__(input_ids, logits);
+      ): Tensor => {
+        return outputType.__call__(input_ids, logits);
       };
 
       const processorList = new LogitsProcessorList();
@@ -261,7 +233,7 @@ export class Transformers extends Model {
   public tokenizer: TransformerTokenizer;
   public typeAdapter: ModelTypeAdapter;
 
-  public tensorLibraryName: 'torch' | 'jax' | 'tensorflow' = 'torch';
+  public tensorLibraryName: 'torch' | 'jax' | 'tensorflow' = 'tensorflow';
 
   constructor(model: PreTrainedModel, tokenizer: PreTrainedTokenizer) {
     super();
@@ -276,19 +248,20 @@ export class Transformers extends Model {
     // HuggingFace transformers.js uses ONNX Runtime tensors, not PyTorch
     // For now, we'll use tensorflow as it's more compatible with JavaScript arrays
     this.tensorLibraryName = 'tensorflow';
-    // TODO: review here. self note
+    // TODO: review here. self note. If not needed, remove the variable.
   }
 
   /**
    * Turn the user input into arguments to pass to the model
    */
-  async #prepareModelInputs(
+  #prepareModelInputs(
     modelInput: string | string[] | Record<string, any>,
-    outputType?: OutlinesLogitsProcessor
-  ): Promise<[any, { input_ids: Tensor; attention_mask: Tensor }]> {
+    outputType?: OutlinesLogitsProcessor // TODO: Review this. In py its added but never used. may be removed.
+  ): [string | string[], { input_ids: Tensor; attention_mask: Tensor }] {
     const prompts = this.typeAdapter.formatInput(modelInput);
-    const [inputIds, attentionMask] = await this.tokenizer.encode(prompts);
+    const [inputIds, attentionMask] = this.tokenizer.encode(prompts);
 
+    // TODO: Review this. In py, it's converting to device. But idk if it's really needed.
     const inputs = {
       input_ids: inputIds,
       attention_mask: attentionMask,
@@ -303,18 +276,17 @@ export class Transformers extends Model {
   async generate(
     modelInput: string | string[] | Record<string, any>,
     outputType?: OutlinesLogitsProcessor,
-    ...inferenceKwargs: any[]
+    inferenceKwargs?: Record<string, any>
   ): Promise<string | string[]> {
-    const [prompts, inputs] = await this.#prepareModelInputs(
-      modelInput,
-      outputType
-    );
+    const [prompts, inputs] = this.#prepareModelInputs(modelInput, outputType);
     const logitsProcessor = this.typeAdapter.formatOutputType(outputType);
 
     console.log(
       '---inputs',
       inputs.attention_mask.ort_tensor.dims,
-      inputs.input_ids.ort_tensor.dims
+      inputs.input_ids.ort_tensor.dims,
+      'aedible',
+      inferenceKwargs
     );
     let generatedIds = await this.#generateOutputSeq({
       prompts,
@@ -323,12 +295,10 @@ export class Transformers extends Model {
       inferenceKwargs,
     });
 
-    console.log('_pirompt', prompts);
     if (typeof prompts === 'string') {
       generatedIds = generatedIds.squeeze(0);
     }
-    console.log('---generatedIds', generatedIds.dims);
-    return this.decodeGeneration(generatedIds);
+    return this.#decodeGeneration(generatedIds);
   }
 
   /**
@@ -353,16 +323,20 @@ export class Transformers extends Model {
     inputs: { input_ids: Tensor; attention_mask: Tensor };
     logitsProcessor: LogitsProcessorList;
     inferenceKwargs?: Record<string, any>;
-  }): Promise<TorchTensor> {
+  }): Promise<Tensor> {
     const inputIds = inputs.input_ids;
     const outputIds = await this.model.generate({
       ...inputs,
       logits_processor: logitsProcessor,
       generation_config: {
-        max_new_tokens: 100,
+        // In `@huggingface/transformers`, the default `max_new_tokens` is 1.
+        // Making it compatible with the python version(which is 20).
+        max_new_tokens: 20,
+        ...inferenceKwargs,
       },
     });
 
+    // TODO: Debug purpose only. Remove after stable release.
     console.log(
       '---outputIds from model.generate:',
       outputIds,
@@ -372,12 +346,12 @@ export class Transformers extends Model {
     );
 
     let generatedIds = outputIds;
-    console.log('squeeze brah', generatedIds.squeeze(0));
     if (!this.model.config.is_encoder_decoder) {
       const promptLen = inputs.input_ids.dims[1];
-      console.log('---inputsD', inputs.input_ids, outputIds.data, promptLen);
+      console.log('---outputIds', outputIds);
       generatedIds = new Tensor('int64', outputIds.data.slice(promptLen), [
-        outputIds.data.slice(promptLen).length,
+        outputIds.dims[0],
+        outputIds.dims[1] - promptLen,
       ]);
     }
 
@@ -395,87 +369,18 @@ export class Transformers extends Model {
     //   generatedIds = generatedIds.view(batchSize, numSamples, -1);
     // }
 
+    // TODO: Set a type for the generatedIds. ModelOutput | Tensor is a problem.
     return generatedIds;
   }
 
-  private getHuggingFaceTensorShape(tensor: any): number[] {
-    if (tensor && tensor.ort_tensor && tensor.ort_tensor.dims) {
-      return Array.from(tensor.ort_tensor.dims);
-    } else if (tensor && tensor.dims) {
-      return Array.from(tensor.dims);
-    } else if (tensor && tensor.shape) {
-      return Array.from(tensor.shape);
-    } else if (Array.isArray(tensor)) {
-      if (Array.isArray(tensor[0])) {
-        return [tensor.length, tensor[0].length];
-      } else {
-        return [tensor.length];
-      }
-    } else {
-      return [1];
-    }
-  }
-
-  private sampleFromLogits(logits: any): number {
-    // Extract logits data
-    let logitsData: number[];
-    if (logits && logits.ort_tensor && logits.ort_tensor.cpuData) {
-      logitsData = Array.from(logits.ort_tensor.cpuData);
-    } else if (logits && logits.data) {
-      logitsData = Array.from(logits.data);
-    } else if (Array.isArray(logits)) {
-      logitsData = logits;
-    } else {
-      throw new Error('Cannot extract logits data for sampling');
-    }
-
-    // Get the shape to determine vocab size
-    const shape = this.getHuggingFaceTensorShape(logits);
-    const vocabSize = shape[shape.length - 1];
-
-    // For batched logits, take the last sequence's logits
-    const lastSeqLogits =
-      shape.length === 2 ? logitsData.slice(-vocabSize) : logitsData;
-
-    // Find the token with the highest probability (argmax)
-    let maxIndex = 0;
-    let maxValue = lastSeqLogits[0];
-    for (let i = 1; i < lastSeqLogits.length; i++) {
-      if (lastSeqLogits[i] > maxValue) {
-        maxValue = lastSeqLogits[i];
-        maxIndex = i;
-      }
-    }
-
-    return maxIndex;
-  }
-
-  private appendToken(tensor: any, tokenId: number): any {
-    // Extract current token IDs
-    const currentTokenIds = Array.from(
-      tensor.ort_tensor?.cpuData || tensor.data || []
-    ).map((id: any) => Number(id));
-
-    // Append the new token
-    const newTokenIds = [...currentTokenIds, tokenId];
-
-    // Create a new BigInt64Array for the updated input_ids
-    const newCpuData = new BigInt64Array(newTokenIds.map((x) => BigInt(x)));
-    const newDims = [1, newCpuData.length];
-
-    // Create a new Tensor object
-    return new Tensor('int64', newCpuData, newDims);
-  }
-
-  private decodeGeneration(generatedIds: TorchTensor): string | string[] {
+  #decodeGeneration(generatedIds: Tensor): string | string[] {
+    console.log('---generatedIds', generatedIds, typeof generatedIds, 'taypı');
     // PYthon conversion
     const shape = generatedIds.dims;
-    console.log('---shape', shape);
+    console.log('---shape', shape, generatedIds);
     if (shape.length === 1) {
-      // Equivalent to: return self.tokenizer.decode([generated_ids])[0]
       return this.tokenizer.decode([generatedIds])[0];
     } else if (shape.length === 2) {
-      // Equivalent to: return self.tokenizer.decode(generated_ids)
       return this.tokenizer.decode(generatedIds);
     } else if (shape.length === 3) {
       // Equivalent to: [self.tokenizer.decode(generated_ids[i]) for i in range(len(generated_ids))]
@@ -535,6 +440,7 @@ export class Transformers extends Model {
   }
 }
 
+// TODO: Review all stuff below. Not %100 matches.
 /**
  * Type adapter for `TransformersMultiModal` model.
  */
@@ -582,11 +488,11 @@ export class TransformersMultiModalTypeAdapter implements ModelTypeAdapter {
     outputType?: OutlinesLogitsProcessor
   ): LogitsProcessorList | null {
     if (outputType) {
-      const wrappedProcessor = async (
+      const wrappedProcessor = (
         input_ids: bigint[][],
         logits: Tensor
-      ): Promise<Tensor> => {
-        return await outputType.__call__(input_ids, logits);
+      ): Tensor => {
+        return outputType.__call__(input_ids, logits);
       };
 
       const processorList = new LogitsProcessorList();

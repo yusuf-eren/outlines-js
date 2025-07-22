@@ -33,7 +33,7 @@ import {
 // Python types converted to TypeScript regex patterns
 export const string = new Regex('"[^"]*"');
 export const integer = new Regex('[+-]?(0|[1-9][0-9]*)');
-export const boolean = new Regex('(True|False)');
+export const boolean = new Regex('(true|false)'); // Self note TODO: Test this. This is python conversion.
 export const number = new Regex(
   `${integer.pattern}(\\.[0-9]+)?([eE][+-][0-9]+)?`
 );
@@ -102,7 +102,7 @@ export {
   // deprecated
   repeat,
   times,
-} from './dsl.js';
+} from './dsl';
 
 // Re-export utility functions
 export { getEnumFromLiteral } from './utils';
@@ -165,4 +165,5 @@ export default {
 
   // Domain modules
   countries,
+  // Should add airports too. TODO: add airports
 };

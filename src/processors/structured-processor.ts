@@ -69,24 +69,7 @@ export class GuideLogitsProcessor extends OutlinesLogitsProcessor {
     this._seq_start_idx = null;
   }
 
-  async process_logits(
-    input_ids: TensorType,
-    logits: TensorType
-  ): Promise<TensorType> {
-    console.log('-dingdon', await input_ids.array());
-
-    const yav = [];
-    const ids = [
-      1, 9690, 198, 2683, 359, 253, 5356, 11173, 30, 2, 198, 1, 4093, 198,
-      26533, 549, 253, 1055, 351, 253, 1462, 284, 354, 1850, 30, 2, 198, 1, 520,
-      9531, 198,
-    ];
-    for (const oo of Object.keys(this.tokenizer.vocabulary)) {
-      if (ids.includes(this.tokenizer.vocabulary[oo])) {
-        yav.push(oo);
-      }
-    }
-    console.log('---aYAV', yav);
+  process_logits(input_ids: TensorType, logits: TensorType): TensorType {
     /**
      * Use the Guide to bias the logits before sampling the next token.
      *
@@ -106,14 +89,10 @@ export class GuideLogitsProcessor extends OutlinesLogitsProcessor {
       this._seq_start_idx = this.tensor_adapter.shape(input_ids)[1]; // Assume [batch_size, seq_len]
     }
 
-    console.log('--zirt', this._seq_start_idx);
-
     const sequence_states: any[] = []; // vector of states corresponding to `input_ids`
 
-    for (const seq_ids of await input_ids.array()) {
-      console.log('---seq_ids', seq_ids);
+    for (const seq_ids of input_ids.arraySync()) {
       const gen_ids = seq_ids.slice(this._seq_start_idx);
-      console.log('---gen_ids', gen_ids);
       const curr_state_key = this.hash_key(
         this.tensor_adapter.toList(tf.tensor(gen_ids))
       );
@@ -134,12 +113,6 @@ export class GuideLogitsProcessor extends OutlinesLogitsProcessor {
       sequence_states.push(this._guide_states.get(curr_state_key));
     }
 
-    console.log(
-      '---sequence states'
-      // sequence_states
-      // this._guide_states,
-      // this.guide
-    );
     const allowed_tokens_batch: TensorType[] = [];
     const batch_indices: TensorType[] = [];
 
@@ -155,33 +128,19 @@ export class GuideLogitsProcessor extends OutlinesLogitsProcessor {
       ); // Store batch index for each allowed token
     }
 
-    console.log('---allowed_tokens_batch', allowed_tokens_batch);
-
     const device = this.tensor_adapter.getDevice(logits);
-    console.log('---deviceS', device);
 
-    console.log(
-      '----aasss',
-      this.tensor_adapter.concatenate(tf.tensor(allowed_tokens_batch) as any)
-    );
     const allowed_tokens_concat = this.tensor_adapter.toDevice(
       this.tensor_adapter.concatenate(tf.tensor(allowed_tokens_batch) as any),
       device
     );
+
     const batch_indices_concat = this.tensor_adapter.toDevice(
-      this.tensor_adapter.concatenate(tf.tensor(batch_indices) as any),
+      this.tensor_adapter.concatenate(batch_indices),
       device
     );
 
-    console.log(
-      '--allowed_tokens_concatr',
-      await allowed_tokens_concat.array(),
-      allowed_tokens_batch
-    );
-    console.log('--batch_indices_concat', await batch_indices_concat);
-
     const mask = this.tensor_adapter.booleanOnesLike(logits);
-    console.log('---maskR', mask);
     // Set mask values to False for allowed tokens (False = not masked)
     this.setMaskValues(
       mask,
@@ -189,7 +148,6 @@ export class GuideLogitsProcessor extends OutlinesLogitsProcessor {
       allowed_tokens_concat,
       false
     );
-    console.log('---maskR2', mask);
     const masked_logits = this.tensor_adapter.applyMask(
       logits,
       mask,

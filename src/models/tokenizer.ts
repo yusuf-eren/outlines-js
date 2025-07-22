@@ -1,4 +1,5 @@
 import { Tensor } from '@huggingface/transformers';
+import ndarray from 'ndarray';
 import * as tf from '@tensorflow/tfjs';
 
 /**
@@ -12,12 +13,9 @@ import * as tf from '@tensorflow/tfjs';
  * Result type for tokenizer encoding operations.
  * Contains both token IDs and attention mask.
  */
-// export interface TokenizerEncodingResult {
-//   tokenIds: any; // Can be number[] or tensor depending on implementation
-//   attentionMask: any; // Can be number[] or tensor depending on implementation
-// }
-
-export type TokenizerEncodingResult = [Tensor, Tensor];
+// TODO: Review that section. It is raw function. We will use either ndarray, raw node type, or tensor.
+// EVen huggingface.js maximum supports float32. BigInt64Array
+// export type TokenizerEncodingResult = [Int32Array, Int32Array];
 
 /**
  * Tokenizer interface that all tokenizer implementations must follow.
@@ -50,7 +48,7 @@ export interface Tokenizer {
   encode(
     prompt: string | string[],
     options?: Record<string, any>
-  ): Promise<[Tensor, Tensor]>;
+  ): [Tensor, Tensor];
 
   /**
    * Decode an array of token IDs back to strings.

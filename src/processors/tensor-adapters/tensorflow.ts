@@ -44,7 +44,7 @@ export class TensorFlowTensorAdapter extends TensorAdapter<tf.Tensor> {
    * @returns The tensor with one less dimension
    */
   squeeze(tensor: tf.Tensor): tf.Tensor {
-    return tf.squeeze(tensor, [0]);
+    return tf.squeeze(tensor);
   }
 
   /**

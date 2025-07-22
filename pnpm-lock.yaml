@@ -17,6 +17,9 @@ dependencies:
   '@tensorflow/tfjs-node':
     specifier: ^4.22.0
     version: 4.22.0(seedrandom@3.0.5)
+  '@types/node-int64':
+    specifier: ^0.4.32
+    version: 0.4.32
   decimal.js:
     specifier: ^10.6.0
     version: 10.6.0
@@ -32,6 +35,12 @@ dependencies:
   js-pytorch:
     specifier: ^0.7.2
     version: 0.7.2
+  ndarray:
+    specifier: ^1.0.19
+    version: 1.0.19
+  node-int64:
+    specifier: ^0.4.0
+    version: 0.4.0
   npm:
     specifier: ^11.4.2
     version: 11.4.2
@@ -43,18 +52,21 @@ dependencies:
     version: 1.22.0
   openai:
     specifier: ^5.9.0
-    version: 5.9.0(zod@3.25.76)
+    version: 5.9.0(zod@4.0.5)
   zod:
-    specifier: ^3.24.2
-    version: 3.25.76
+    specifier: ^4.0.5
+    version: 4.0.5
   zod-to-json-schema:
     specifier: ^3.24.6
-    version: 3.24.6(zod@3.25.76)
+    version: 3.24.6(zod@4.0.5)
 
 devDependencies:
   '@types/jest':
     specifier: ^29.5.12
     version: 29.5.14
+  '@types/ndarray':
+    specifier: ^1.0.14
+    version: 1.0.14
   '@types/node':
     specifier: ^20.11.17
     version: 20.19.7
@@ -1271,11 +1283,21 @@ packages:
     resolution: {integrity: sha512-MqTGEo5bj5t157U6fA/BiDynNkn0YknVdh48CMPkTSpFTVmvao5UQmm7uEF6xBEo7qIMAlY/JSleYaE6VOdpaA==}
     dev: false
 
+  /@types/ndarray@1.0.14:
+    resolution: {integrity: sha512-oANmFZMnFQvb219SSBIhI1Ih/r4CvHDOzkWyJS/XRqkMrGH5/kaPSA1hQhdIBzouaE+5KpE/f5ylI9cujmckQg==}
+    dev: true
+
   /@types/node-fetch@2.6.12:
     resolution: {integrity: sha512-8nneRWKCg3rMtF69nLQJnOYUcbafYeFSjqkw3jCRLsqkWFlHaoQrr5mXmofFGOx3DKn7UfmBMyov8ySvLRVldA==}
     dependencies:
       '@types/node': 20.19.7
       form-data: 4.0.3
+    dev: false
+
+  /@types/node-int64@0.4.32:
+    resolution: {integrity: sha512-xf/JsSlnXQ+mzvc0IpXemcrO4BrCfpgNpMco+GLcXkFk01k/gW9lGJu+Vof0ZSvHK6DsHJDPSbjFPs36QkWXqw==}
+    dependencies:
+      '@types/node': 20.19.7
     dev: false
 
   /@types/node@20.19.7:
@@ -2433,6 +2455,10 @@ packages:
     resolution: {integrity: sha512-JV/yugV2uzW5iMRSiZAyDtQd+nxtUnjeLt0acNdw98kKLrvuRVyB80tsREOE7yvGVgalhZ6RNXCmEHkUKBKxew==}
     dev: false
 
+  /iota-array@1.0.0:
+    resolution: {integrity: sha512-pZ2xT+LOHckCatGQ3DcG/a+QuEqvoxqkiL7tvE8nn3uuu+f6i1TtpB5/FtWFbxUuVr5PZCx8KskuGatbJDXOWA==}
+    dev: false
+
   /ip-address@9.0.5:
     resolution: {integrity: sha512-zHtQzGojZXTwZTHQqra+ETKd4Sn3vgi7uBmlPoXVWZqYvuKmtI0l/VZTjqGmJY9x88GGOaZ9+G9ES8hC4T4X8g==}
     engines: {node: '>= 12'}
@@ -2447,6 +2473,10 @@ packages:
 
   /is-arrayish@0.3.2:
     resolution: {integrity: sha512-eVRqCvVlZbuw3GrM63ovNSNAeA1K16kaR/LRY/92w0zxQ5/1YzwblUX652i4Xs9RwAGjW9d9y6X88t8OaAJfWQ==}
+    dev: false
+
+  /is-buffer@1.1.6:
+    resolution: {integrity: sha512-NcdALwpXkTm5Zvvbk7owOUSvVvBKDgKP5/ewfXEznmQFfs4ZRmanOeKBTjRVjka3QFoN6XJ+9F3USqfHqTaU5w==}
     dev: false
 
   /is-core-module@2.16.1:
@@ -3285,6 +3315,13 @@ packages:
     resolution: {integrity: sha512-OWND8ei3VtNC9h7V60qff3SVobHr996CTwgxubgyQYEpg290h9J0buyECNNJexkFm5sOajh5G116RYA1c8ZMSw==}
     dev: true
 
+  /ndarray@1.0.19:
+    resolution: {integrity: sha512-B4JHA4vdyZU30ELBw3g7/p9bZupyew5a7tX1Y/gGeF2hafrPaQZhgrGQfsvgfYbgdFZjYwuEcnaobeM/WMW+HQ==}
+    dependencies:
+      iota-array: 1.0.0
+      is-buffer: 1.1.6
+    dev: false
+
   /negotiator@0.6.4:
     resolution: {integrity: sha512-myRT3DiWPHqho5PrJaIRyaMv2kgYf0mUVgBNOYMuCH5Ki1yEiQaf/ZJuQ62nvpc44wL5WDbTX7yGJi1Neevw8w==}
     engines: {node: '>= 0.6'}
@@ -3342,7 +3379,6 @@ packages:
 
   /node-int64@0.4.0:
     resolution: {integrity: sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw==}
-    dev: true
 
   /node-releases@2.0.19:
     resolution: {integrity: sha512-xxOWJsBKtzAq7DY0J+DTzuz58K8e7sJbdgwkbMWQe8UYB6ekmsQ45q0M/tJDsGaZmbC+l7n57UV8Hl5tHxO9uw==}
@@ -3535,7 +3571,7 @@ packages:
       protobufjs: 7.5.3
     dev: false
 
-  /openai@5.9.0(zod@3.25.76):
+  /openai@5.9.0(zod@4.0.5):
     resolution: {integrity: sha512-cmLC0pfqLLhBGxE4aZPyRPjydgYCncppV2ClQkKmW79hNjCvmzkfhz8rN5/YVDmjVQlFV+UsF1JIuNjNgeagyQ==}
     hasBin: true
     peerDependencies:
@@ -3547,7 +3583,7 @@ packages:
       zod:
         optional: true
     dependencies:
-      zod: 3.25.76
+      zod: 4.0.5
     dev: false
 
   /p-limit@2.3.0:
@@ -4418,14 +4454,14 @@ packages:
     engines: {node: '>=10'}
     dev: true
 
-  /zod-to-json-schema@3.24.6(zod@3.25.76):
+  /zod-to-json-schema@3.24.6(zod@4.0.5):
     resolution: {integrity: sha512-h/z3PKvcTcTetyjl1fkj79MHNEjm+HpD6NXheWjzOekY7kV+lwDYnHw+ivHkijnCSMz1yJaWBD9vu/Fcmk+vEg==}
     peerDependencies:
       zod: ^3.24.1
     dependencies:
-      zod: 3.25.76
+      zod: 4.0.5
     dev: false
 
-  /zod@3.25.76:
-    resolution: {integrity: sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==}
+  /zod@4.0.5:
+    resolution: {integrity: sha512-/5UuuRPStvHXu7RS+gmvRf4NXrNxpSllGwDnCBcJZtQsKrviYXm54yDGV2KYNLT5kq0lHGcl7lqWJLgSaG+tgA==}
     dev: false
