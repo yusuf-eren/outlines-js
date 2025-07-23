@@ -30,8 +30,7 @@ import { buildRegexFromSchema } from '../outlines-core';
 import { OutlinesLogitsProcessor, TensorType } from './base-logit-processor';
 import { Tokenizer } from '../models/tokenizer';
 import { Guide, RegexGuide, CFGGuide, Instruction } from './guide';
-
-export type JsonSchema = string | object | { new (): any };
+import { JsonSchema } from '../types';
 
 /**
  * Bias generation using a guide.
