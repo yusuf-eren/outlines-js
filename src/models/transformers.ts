@@ -52,8 +52,6 @@ export interface TorchTensor {
   dims: number[]; // HuggingFace tensors use dims instead of shape
 }
 
-export interface TorchLongTensor extends TorchTensor {}
-
 type LlamaTokenizerType = typeof LlamaTokenizer | typeof CodeLlamaTokenizer;
 
 /**

@@ -91,32 +91,10 @@ export abstract class OutlinesLogitsProcessor {
      */
     // if input_ids is 1D and logits is 2D with a single sequence,
     // reshape input_ids to 2D (needed for mlx-lm)
-    input_ids = tf.tensor(input_ids.map((x) => x.map((y) => Number(y))));
-    logits = tf.tensor([logits.ort_tensor.cpuData]);
-    console.log(
-      'hayırdır',
-      input_ids,
-      logits,
-      this.tensor_adapter.shape(input_ids),
-      this.tensor_adapter.shape(logits)
-    );
-    console.log(
-      'hayyyyır',
-      this.tensor_adapter.shape(input_ids).length,
-      this.tensor_adapter.shape(logits).length
-    );
-    console.log(
-      'olum bu ne',
-      this.tensor_adapter.shape(logits),
-      this.tensor_adapter.shape(input_ids)
-    );
 
-    console.log(
-      'olum siz manyak mısınız?',
-      this.tensor_adapter.shape(input_ids).length === 1,
-      this.tensor_adapter.shape(logits).length === 2,
-      this.tensor_adapter.shape(logits)[0] === 1
-    );
+    // TODO: Refactor all of this parts.
+    input_ids = tf.tensor(input_ids.map((x) => x.map((y) => Number(y))));
+    logits = tf.tensor([logits.data]);
     if (
       this.tensor_adapter.shape(input_ids).length === 1 &&
       this.tensor_adapter.shape(logits).length === 2 &&
@@ -150,13 +128,8 @@ export abstract class OutlinesLogitsProcessor {
 
     // Guarantee passed as 2D Tensors, then convert back to original
     // (1D or 2D) shape
-    console.log(
-      '---this.tensor_adapter.shape(logits).length === 2',
-      this.tensor_adapter.shape(logits).length === 2
-    );
     let processed_logits: TensorType;
     if (this.tensor_adapter.shape(logits).length === 2) {
-      console.log('---inputIdsZart', input_ids, logits);
       processed_logits = this.process_logits(input_ids, logits);
     } else if (this.tensor_adapter.shape(logits).length === 1) {
       processed_logits = this.tensor_adapter.squeeze(
